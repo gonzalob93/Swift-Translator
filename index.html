@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pacs.008 → MT103 Translator · SWIFT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design Tokens ──────────────────────────────────────────────────── */
+    :root {
+      --bg:        #0a0e17;
+      --bg2:       #111827;
+      --bg3:       #1a2233;
+      --border:    #1e2d45;
+      --border2:   #2a3f5f;
+      --accent:    #00d4ff;
+      --accent2:   #0088bb;
+      --gold:      #f5a623;
+      --gold2:     #c8841a;
+      --green:     #00e676;
+      --red:       #ff5252;
+      --text:      #e8edf5;
+      --text2:     #8899b4;
+      --text3:     #4a6080;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'IBM Plex Sans', sans-serif;
+      --radius:    6px;
+      --shadow:    0 4px 24px rgba(0,0,0,0.5);
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 64px;
+      background: var(--bg2);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bg);
+      letter-spacing: -0.5px;
+    }
+
+    .logo-text {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.05em;
+    }
+
+    .logo-sep { color: var(--text3); font-family: var(--mono); margin: 0 4px; }
+
+    .badge {
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.08em;
+    }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-label {
+      font-size: 11px;
+      color: var(--text2);
+      font-family: var(--mono);
+    }
+
+    /* ── Main layout ────────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+      height: calc(100vh - 64px);
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────────────────── */
+    .topbar {
+      grid-column: 1 / -1;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar h1 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text2);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-family: var(--mono);
+    }
+
+    .topbar h1 span { color: var(--accent); }
+
+    .topbar-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      letter-spacing: 0.04em;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-primary:hover { background: #33ddff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,212,255,0.3); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--border2);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-gold {
+      background: var(--gold);
+      color: var(--bg);
+    }
+    .btn-gold:hover { background: #f7b84a; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,166,35,0.3); }
+
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+    /* ── Panels ──────────────────────────────────────────────────────────── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    .panel:last-child { border-right: none; }
+
+    .panel-header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .panel-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+
+    .tag-iso {
+      background: rgba(245,166,35,0.15);
+      color: var(--gold);
+      border: 1px solid rgba(245,166,35,0.3);
+    }
+
+    .tag-mt {
+      background: rgba(0,212,255,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(0,212,255,0.25);
+    }
+
+    .panel-title {
+      font-size: 13px;
+      color: var(--text2);
+      font-weight: 400;
+    }
+
+    .panel-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+    }
+
+    /* ── Drop Zone ───────────────────────────────────────────────────────── */
+    .drop-zone {
+      margin: 20px;
+      border: 2px dashed var(--border2);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: rgba(255,255,255,0.01);
+      flex-shrink: 0;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(0,212,255,0.04);
+    }
+
+    .drop-zone-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .drop-zone-text {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.5;
+    }
+
+    .drop-zone-text strong {
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    .drop-zone-text strong:hover { text-decoration: underline; }
+
+    .drop-zone-hint {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      margin-top: 6px;
+      display: block;
+    }
+
+    #fileInput { display: none; }
+
+    /* ── XML Editor ──────────────────────────────────────────────────────── */
+    .xml-editor {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin: 0 20px 20px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg2);
+    }
+
+    .xml-editor-bar {
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      flex-shrink: 0;
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+
+    textarea#xmlInput {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.6;
+      padding: 16px;
+      resize: none;
+      tab-size: 2;
+    }
+
+    textarea#xmlInput::placeholder { color: var(--text3); }
+
+    /* ── MT Output Panel ──────────────────────────────────────────────────── */
+    #outputPanel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text3);
+      padding: 40px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .empty-text {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .empty-hint {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text3);
+      background: var(--bg3);
+      padding: 8px 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Result layout ───────────────────────────────────────────────────── */
+    #resultArea {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Tabs ────────────────────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 0 20px;
+      flex-shrink: 0;
+    }
+
+    .tab {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 10px 16px;
+      cursor: pointer;
+      color: var(--text3);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .tab:hover { color: var(--text2); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── MT103 raw output ─────────────────────────────────────────────────── */
+    .mt-output {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      display: none;
+    }
+
+    .mt-output.active { display: block; }
+
+    .mt-raw {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text);
+    }
+
+    /* Syntax highlighting for MT blocks */
+    .mt-raw .block-label { color: var(--gold); font-weight: 600; }
+    .mt-raw .field-tag   { color: var(--accent); font-weight: 600; }
+    .mt-raw .field-val   { color: var(--text); }
+
+    /* ── Field table ─────────────────────────────────────────────────────── */
+    .fields-view {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      display: none;
+    }
+
+    .fields-view.active { display: block; }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      align-items: stretch;
+      animation: slideIn 0.2s ease both;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .field-row:last-child { border-bottom: none; }
+
+    .field-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      padding: 12px 16px;
+      background: rgba(0,212,255,0.04);
+      border-right: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .field-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      padding: 12px 16px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    .field-empty .field-value { color: var(--text3); font-style: italic; }
+
+    /* ── Meta info ───────────────────────────────────────────────────────── */
+    .meta-view {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      display: none;
+    }
+
+    .meta-view.active { display: block; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .meta-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    .meta-card-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .meta-card-value {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .meta-card-value.accent { color: var(--accent); }
+    .meta-card-value.gold   { color: var(--gold); }
+    .meta-card-value.green  { color: var(--green); }
+
+    /* ── Error ───────────────────────────────────────────────────────────── */
+    .error-banner {
+      margin: 16px 20px 0;
+      background: rgba(255,82,82,0.1);
+      border: 1px solid rgba(255,82,82,0.3);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--red);
+      display: none;
+      flex-shrink: 0;
+    }
+
+    .error-banner.visible { display: block; }
+
+    /* ── Notification ─────────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.25s ease;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast .toast-icon { font-size: 16px; }
+
+    /* ── Scrollbars ──────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+        height: auto;
+        min-height: calc(100vh - 64px);
+      }
+      .panel { min-height: 400px; }
+      header { padding: 0 16px; }
+      .topbar { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">MX</div>
+    <span class="logo-text">pacs.008</span>
+    <span class="logo-sep">→</span>
+    <span class="logo-text">MT103</span>
+  </div>
+  <span class="badge">ISO 20022 · SWIFT</span>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <span class="status-label">TRANSLATOR READY</span>
+  </div>
+</header>
+
+<!-- ── Top actions ────────────────────────────────────────────────────────── -->
+<div class="topbar">
+  <h1>ISO 20022 <span>pacs.008.001.08</span> to SWIFT MT103</h1>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost" onclick="loadSample()">⬇ Load Sample</button>
+    <button class="btn btn-primary" id="translateBtn" onclick="translate()" disabled>⚡ Translate</button>
+  </div>
+</div>
+
+<!-- ── Main grid ──────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- LEFT: pacs.008 Input -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-tag tag-iso">ISO 20022</span>
+      <span class="panel-title">pacs.008.001.08 XML Input</span>
+      <div class="panel-actions">
+        <button class="btn btn-ghost" onclick="clearInput()" style="padding:5px 10px;font-size:11px;">✕ Clear</button>
+      </div>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone"
+         onclick="document.getElementById('fileInput').click()"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)">
+      <span class="drop-zone-icon">📂</span>
+      <p class="drop-zone-text">
+        Drop your <strong>.xml</strong> file here or <strong>click to browse</strong>
+      </p>
+      <span class="drop-zone-hint">pacs.008.001.08 · UTF-8 · Max 1MB</span>
+    </div>
+    <input type="file" id="fileInput" accept=".xml,text/xml,application/xml" onchange="handleFileSelect(event)" />
+
+    <!-- XML Editor -->
+    <div class="xml-editor">
+      <div class="xml-editor-bar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span style="margin-left:8px;">pacs008.xml</span>
+      </div>
+      <textarea id="xmlInput"
+        placeholder="<!-- Paste pacs.008.001.08 XML here or use the drop zone above -->"
+        oninput="onInputChange()"
+        spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <!-- RIGHT: MT103 Output -->
+  <div class="panel" id="outputPanel">
+    <div class="panel-header">
+      <span class="panel-tag tag-mt">SWIFT MT</span>
+      <span class="panel-title">MT103 Output</span>
+      <div class="panel-actions">
+        <button class="btn btn-ghost" id="copyBtn" onclick="copyMT()" style="padding:5px 10px;font-size:11px;" disabled>⎘ Copy</button>
+        <button class="btn btn-gold" id="downloadBtn" onclick="downloadMT()" style="padding:5px 10px;font-size:11px;" disabled>↓ Download</button>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div class="error-banner" id="errorBanner"></div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <span class="empty-icon">⇄</span>
+      <p class="empty-text">Paste or load a pacs.008.001.08 XML<br/>and click <strong>Translate</strong> to generate MT103</p>
+      <span class="empty-hint">:20: / :32A: / :50K: / :59: / :70: / :71A:</span>
+    </div>
+
+    <!-- Result area -->
+    <div id="resultArea" style="display:none; flex:1; display:none; flex-direction:column; overflow:hidden;">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('raw',this)">RAW MT103</div>
+        <div class="tab" onclick="switchTab('fields',this)">FIELDS</div>
+        <div class="tab" onclick="switchTab('meta',this)">METADATA</div>
+      </div>
+
+      <!-- Raw MT output -->
+      <div class="mt-output active" id="tabRaw">
+        <div class="mt-raw" id="mtRaw"></div>
+      </div>
+
+      <!-- Fields breakdown -->
+      <div class="fields-view" id="tabFields">
+        <div id="fieldsContainer"></div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="meta-view" id="tabMeta">
+        <div class="meta-grid" id="metaContainer"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast notification -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon">✓</span>
+  <span id="toastMsg">Copied to clipboard</span>
+</div>
+
+<script type="module">
+  import { translatePacs008ToMT103 } from './src/translator.js';
+  window._translate = translatePacs008ToMT103;
+</script>
+
+<script>
+  let lastResult = null;
+
+  // ── File handling ──────────────────────────────────────────────────────────
+  function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.add('dragover');
+  }
+
+  function handleDragLeave() {
+    document.getElementById('dropZone').classList.remove('dragover');
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) readFile(file);
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) readFile(file);
+  }
+
+  function readFile(file) {
+    if (file.size > 1_048_576) { showError('Archivo demasiado grande (máx 1MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('xmlInput').value = e.target.result;
+      onInputChange();
+      showToast('📂', `${file.name} cargado`);
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  // ── Input change ───────────────────────────────────────────────────────────
+  function onInputChange() {
+    const val = document.getElementById('xmlInput').value.trim();
+    document.getElementById('translateBtn').disabled = !val;
+    hideError();
+  }
+
+  // ── Load sample ────────────────────────────────────────────────────────────
+  async function loadSample() {
+    try {
+      const r = await fetch('./sample/pacs008_sample.xml');
+      const txt = await r.text();
+      document.getElementById('xmlInput').value = txt;
+      onInputChange();
+      showToast('📄', 'Sample cargado — JPMorgan → Deutsche Bank');
+    } catch {
+      showError('No se pudo cargar el sample. Asegúrate de servir la app desde un servidor.');
+    }
+  }
+
+  // ── Translate ──────────────────────────────────────────────────────────────
+  async function translate() {
+    const xml = document.getElementById('xmlInput').value.trim();
+    if (!xml) return;
+
+    hideError();
+
+    // Wait for module to load
+    const fn = window._translate;
+    if (!fn) {
+      showError('Módulo de traducción no disponible. Serve la app con un servidor HTTP.');
+      return;
+    }
+
+    try {
+      const result = fn(xml);
+      lastResult = result;
+      renderResult(result);
+    } catch (err) {
+      showError('Error al traducir: ' + err.message);
+    }
+  }
+
+  // ── Render result ─────────────────────────────────────────────────────────
+  function renderResult(result) {
+    // Show result area
+    document.getElementById('emptyState').style.display = 'none';
+    const ra = document.getElementById('resultArea');
+    ra.style.display    = 'flex';
+    ra.style.flex       = '1';
+    ra.style.flexDirection = 'column';
+    ra.style.overflow   = 'hidden';
+
+    // Enable actions
+    document.getElementById('copyBtn').disabled     = false;
+    document.getElementById('downloadBtn').disabled = false;
+
+    // Raw MT103 with syntax highlighting
+    document.getElementById('mtRaw').innerHTML = highlightMT(result.mt103);
+
+    // Fields
+    const fc = document.getElementById('fieldsContainer');
+    fc.innerHTML = '';
+    for (const [key, f] of Object.entries(result.fields)) {
+      if (!f.value) continue;
+      const row = document.createElement('div');
+      row.className = 'field-row' + (f.value ? '' : ' field-empty');
+      row.innerHTML = `
+        <div class="field-label">${escapeHtml(f.label)}</div>
+        <div class="field-value">${escapeHtml(f.value || '—')}</div>
+      `;
+      row.style.animationDelay = (Object.keys(result.fields).indexOf(key) * 0.04) + 's';
+      fc.appendChild(row);
+    }
+
+    // Meta
+    const mc = document.getElementById('metaContainer');
+    const m = result.meta;
+    mc.innerHTML = `
+      ${metaCard('Message ID', m.msgId, 'accent')}
+      ${metaCard('UETR', m.uetr, '')}
+      ${metaCard('Transaction ID', m.txId, '')}
+      ${metaCard('End-to-End ID', m.endToEndId, '')}
+      ${metaCard('Settlement Date', m.intrBkDt, 'gold')}
+      ${metaCard('Currency', m.currency, 'green')}
+      ${metaCard('Amount', m.amount, 'green')}
+      ${metaCard('Charge Bearer', m.chrgBr, '')}
+      ${metaCard('Debtor Agent BIC', m.dbtrAgtBic, 'accent')}
+      ${metaCard('Debtor Agent Name', m.dbtrAgtNm, '')}
+      ${metaCard('Creditor Agent BIC', m.cdtrAgtBic, 'accent')}
+      ${metaCard('Creditor Agent Name', m.cdtrAgtNm, '')}
+    `;
+  }
+
+  function metaCard(label, value, cls) {
+    return `
+      <div class="meta-card">
+        <div class="meta-card-label">${label}</div>
+        <div class="meta-card-value ${cls}">${escapeHtml(value || '—')}</div>
+      </div>
+    `;
+  }
+
+  function highlightMT(raw) {
+    return escapeHtml(raw)
+      .replace(/(\{[1-5]:)/g, '<span class="block-label">$1</span>')
+      .replace(/(:[0-9]{2}[A-Z]?:)/g, '<span class="field-tag">$1</span>');
+  }
+
+  function escapeHtml(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  function switchTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.mt-output, .fields-view, .meta-view')
+            .forEach(p => p.classList.remove('active'));
+    if (name === 'raw')    document.getElementById('tabRaw').classList.add('active');
+    if (name === 'fields') document.getElementById('tabFields').classList.add('active');
+    if (name === 'meta')   document.getElementById('tabMeta').classList.add('active');
+  }
+
+  // ── Copy / Download ────────────────────────────────────────────────────────
+  function copyMT() {
+    if (!lastResult) return;
+    navigator.clipboard.writeText(lastResult.mt103)
+      .then(() => showToast('✓', 'MT103 copiado al clipboard'))
+      .catch(() => showToast('⚠', 'Error al copiar'));
+  }
+
+  function downloadMT() {
+    if (!lastResult) return;
+    const blob = new Blob([lastResult.mt103], { type: 'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const ref  = (lastResult.meta.txId || lastResult.meta.msgId || 'MT103').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,30);
+    a.href = url;
+    a.download = `MT103_${ref}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('↓', 'Archivo descargado');
+  }
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+  function clearInput() {
+    document.getElementById('xmlInput').value = '';
+    document.getElementById('translateBtn').disabled = true;
+    document.getElementById('emptyState').style.display = '';
+    document.getElementById('resultArea').style.display = 'none';
+    document.getElementById('copyBtn').disabled     = true;
+    document.getElementById('downloadBtn').disabled = true;
+    lastResult = null;
+    hideError();
+  }
+
+  function showError(msg) {
+    const b = document.getElementById('errorBanner');
+    b.textContent = '⚠ ' + msg;
+    b.classList.add('visible');
+  }
+
+  function hideError() {
+    document.getElementById('errorBanner').classList.remove('visible');
+  }
+
+  let toastTimer;
+  function showToast(icon, msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toastIcon').textContent = icon;
+    document.getElementById('toastMsg').textContent  = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  // Expose to global
+  window.loadSample  = loadSample;
+  window.translate   = translate;
+  window.clearInput  = clearInput;
+  window.copyMT      = copyMT;
+  window.downloadMT  = downloadMT;
+  window.switchTab   = switchTab;
+  window.handleDragOver  = handleDragOver;
+  window.handleDragLeave = handleDragLeave;
+  window.handleDrop      = handleDrop;
+  window.handleFileSelect= handleFileSelect;
+  window.onInputChange   = onInputChange;
+</script>
+
+</body>
+</html>
