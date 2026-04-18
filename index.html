@@ -623,7 +623,7 @@
   <h1>ISO 20022 <span>pacs.008.001.08</span> to SWIFT MT103</h1>
   <div class="topbar-actions">
     <button class="btn btn-ghost" onclick="loadSample()">⬇ Load Sample</button>
-    <button class="btn btn-primary" id="translateBtn" onclick="translate()" disabled>⚡ Translate</button>
+    <button class="btn btn-primary" id="translateBtn" onclick="runTranslate()" disabled>⚡ Translate</button>
   </div>
 </div>
 
@@ -1017,7 +1017,7 @@
   }
 
   // ── Translate ──────────────────────────────────────────────────────────────
-  function translate() {
+  function runTranslate() {
     const xml = document.getElementById('xmlInput').value.trim();
     if (!xml) return;
     hideError();
@@ -1166,7 +1166,7 @@
 
   // Expose to global
   window.loadSample  = loadSample;
-  window.translate   = translate;
+  window.runTranslate = runTranslate;
   window.clearInput  = clearInput;
   window.copyMT      = copyMT;
   window.downloadMT  = downloadMT;
