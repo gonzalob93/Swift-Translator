@@ -723,12 +723,250 @@
   <span id="toastMsg">Copied to clipboard</span>
 </div>
 
-<script type="module">
-  import { translatePacs008ToMT103 } from './src/translator.js';
-  window._translate = translatePacs008ToMT103;
-</script>
-
 <script>
+  // ── Translator (inlined from src/translator.js) ────────────────────────────
+  function translatePacs008ToMT103(xmlString) {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+
+    const parseError = xmlDoc.querySelector("parsererror");
+    if (parseError) {
+      throw new Error("XML inválido: " + parseError.textContent);
+    }
+
+    const ns = "urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08";
+
+    function getEl(parent, ...tags) {
+      for (const tag of tags) {
+        let el = parent.getElementsByTagNameNS(ns, tag)[0];
+        if (!el) el = parent.getElementsByTagName(tag)[0];
+        if (el) parent = el;
+        else return null;
+      }
+      return parent;
+    }
+
+    function getText(...tags) {
+      const el = getEl(xmlDoc, ...tags);
+      return el ? el.textContent.trim() : "";
+    }
+
+    const msgId      = getText("MsgId");
+    const creDtTm    = getText("CreDtTm");
+    const intrBkDt   = getText("IntrBkSttlmDt") || creDtTm.split("T")[0];
+    const chrgBr     = getText("ChrgBr");
+    const uetr       = getText("UETR");
+    const endToEndId = getText("EndToEndId");
+    const txId       = getText("TxId");
+    const instrId    = getText("InstrId");
+
+    const amtEl    = xmlDoc.getElementsByTagName("IntrBkSttlmAmt")[0];
+    const amount   = amtEl ? amtEl.textContent.trim() : "";
+    const currency = amtEl ? amtEl.getAttribute("Ccy") : "";
+
+    const dbtrNm       = getText("Dbtr", "Nm");
+    const dbtrAcctOthr = getText("DbtrAcct", "Id", "Othr", "Id");
+    const dbtrAcctIban = getText("DbtrAcct", "Id", "IBAN");
+    const dbtrAcct     = dbtrAcctIban || dbtrAcctOthr;
+    const dbtrAdrLines = [];
+    const dbtrEl = xmlDoc.getElementsByTagNameNS(ns, "Dbtr")[0] || xmlDoc.getElementsByTagName("Dbtr")[0];
+    if (dbtrEl) {
+      const lines = dbtrEl.getElementsByTagName("AdrLine");
+      for (const l of lines) dbtrAdrLines.push(l.textContent.trim());
+      if (!dbtrAdrLines.length) {
+        const ctry = dbtrEl.getElementsByTagName("Ctry")[0];
+        if (ctry) dbtrAdrLines.push(ctry.textContent.trim());
+      }
+    }
+
+    const dbtrAgtBic = getText("DbtrAgt", "FinInstnId", "BICFI");
+    const dbtrAgtNm  = getText("DbtrAgt", "FinInstnId", "Nm");
+    const cdtrAgtBic = getText("CdtrAgt", "FinInstnId", "BICFI");
+    const cdtrAgtNm  = getText("CdtrAgt", "FinInstnId", "Nm");
+
+    const cdtrNm       = getText("Cdtr", "Nm");
+    const cdtrAcctIban = getText("CdtrAcct", "Id", "IBAN");
+    const cdtrAcctOthr = getText("CdtrAcct", "Id", "Othr", "Id");
+    const cdtrAcct     = cdtrAcctIban || cdtrAcctOthr;
+    const cdtrAdrLines = [];
+    const cdtrEl = xmlDoc.getElementsByTagNameNS(ns, "Cdtr")[0] || xmlDoc.getElementsByTagName("Cdtr")[0];
+    if (cdtrEl) {
+      const lines = cdtrEl.getElementsByTagName("AdrLine");
+      for (const l of lines) cdtrAdrLines.push(l.textContent.trim());
+    }
+
+    const rmtUnstrd  = getText("RmtInf", "Ustrd");
+    const rmtStrd    = getText("RmtInf", "Strd", "CdtrRefInf", "Ref");
+    const remittance = rmtUnstrd || rmtStrd;
+
+    function formatDate32A(isoDate) {
+      const d = (isoDate || "").replace(/-/g, "");
+      return d.length === 8 ? d.slice(2) : isoDate;
+    }
+    function formatAmount32A(amt) {
+      const n = parseFloat(amt);
+      return isNaN(n) ? amt : n.toFixed(2).replace(".", ",");
+    }
+    function chargeBearerMap(code) {
+      const map = { SHA:"SHA", OUR:"OUR", BEN:"BEN", DEBT:"OUR", CRED:"BEN", SHAR:"SHA" };
+      return map[code] || code || "SHA";
+    }
+    function truncate(str, maxLen) { return (str || "").slice(0, maxLen); }
+
+    const f20  = truncate(instrId || txId || msgId, 16).replace(/^\/|\/$/g, "");
+    const f23B = "CRED";
+    const f32A = formatDate32A(intrBkDt) + currency + formatAmount32A(amount);
+
+    let f50K = "";
+    if (dbtrAcct) f50K += "/" + dbtrAcct + "\n";
+    f50K += dbtrNm;
+    if (dbtrAdrLines.length) f50K += "\n" + dbtrAdrLines.slice(0, 3).join("\n");
+
+    const f52A = dbtrAgtBic || "";
+    const f57A = cdtrAgtBic || "";
+
+    let f59 = "";
+    if (cdtrAcct) f59 += "/" + cdtrAcct + "\n";
+    f59 += cdtrNm;
+    if (cdtrAdrLines.length) f59 += "\n" + cdtrAdrLines.slice(0, 3).join("\n");
+
+    const f70Lines = [];
+    if (remittance) {
+      for (let i = 0; i < remittance.length && f70Lines.length < 4; i += 35)
+        f70Lines.push(remittance.slice(i, i + 35));
+    }
+    const f70  = f70Lines.join("\n");
+    const f71A = chargeBearerMap(chrgBr);
+
+    const f72Lines = [];
+    if (uetr) f72Lines.push("/UETR/" + uetr.slice(0, 28));
+    if (endToEndId && endToEndId !== "NOTPROVIDED")
+      f72Lines.push("/UETR2/" + truncate(endToEndId, 27));
+    const f72 = f72Lines.join("\n");
+
+    const senderBic   = (dbtrAgtBic || "AAAAUSXX").padEnd(12, "X").slice(0, 12);
+    const receiverBic = (cdtrAgtBic || "BBBBDEXX").padEnd(12, "X").slice(0, 12);
+
+    const block1 = `{1:F01${senderBic}0000000000}`;
+    const block2 = `{2:I103${receiverBic}N}`;
+    const block3 = uetr ? `{3:{121:${uetr}}}` : `{3:}`;
+
+    const lines4 = ["{4:"];
+    lines4.push(`:20:${f20}`);
+    lines4.push(`:23B:${f23B}`);
+    lines4.push(`:32A:${f32A}`);
+    if (f50K) lines4.push(`:50K:${f50K}`);
+    if (f52A) lines4.push(`:52A:${f52A}`);
+    if (f57A) lines4.push(`:57A:${f57A}`);
+    if (f59)  lines4.push(`:59:${f59}`);
+    if (f70)  lines4.push(`:70:${f70}`);
+    lines4.push(`:71A:${f71A}`);
+    if (f72)  lines4.push(`:72:${f72}`);
+    lines4.push(`-}`);
+    const block4 = lines4.join("\n");
+    const mt103  = [block1, block2, block3, block4].join("\n");
+
+    return {
+      mt103,
+      fields: {
+        f20:  { label: "20 – Sender's Reference",         value: f20  },
+        f23B: { label: "23B – Bank Operation Code",       value: f23B },
+        f32A: { label: "32A – Value Date / CCY / Amount", value: f32A },
+        f50K: { label: "50K – Ordering Customer",         value: f50K },
+        f52A: { label: "52A – Ordering Institution",      value: f52A },
+        f57A: { label: "57A – Account With Institution",  value: f57A },
+        f59:  { label: "59 – Beneficiary Customer",       value: f59  },
+        f70:  { label: "70 – Remittance Information",     value: f70  },
+        f71A: { label: "71A – Details of Charges",        value: f71A },
+        f72:  { label: "72 – Sender to Receiver Info",    value: f72  },
+      },
+      meta: {
+        msgId, uetr, txId, endToEndId, currency,
+        amount, intrBkDt, chrgBr,
+        dbtrAgtBic, dbtrAgtNm, cdtrAgtBic, cdtrAgtNm,
+      },
+    };
+  }
+
+  // ── Sample XML (embedded — no fetch needed) ────────────────────────────────
+  const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>JPMC20240418001234567</MsgId>
+      <CreDtTm>2024-04-18T10:30:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <TtlIntrBkSttlmAmt Ccy="USD">50000.00</TtlIntrBkSttlmAmt>
+      <IntrBkSttlmDt>2024-04-18</IntrBkSttlmDt>
+      <SttlmInf><SttlmMtd>CLRG</SttlmMtd></SttlmInf>
+      <InstgAgt>
+        <FinInstnId>
+          <BICFI>CHASUS33</BICFI>
+          <Nm>JPMORGAN CHASE BANK, N.A.</Nm>
+        </FinInstnId>
+      </InstgAgt>
+      <InstdAgt>
+        <FinInstnId>
+          <BICFI>DEUTDEDB</BICFI>
+          <Nm>DEUTSCHE BANK AG</Nm>
+        </FinInstnId>
+      </InstdAgt>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>JPMC20240418INSTR001</InstrId>
+        <EndToEndId>E2E-ACME-CORP-20240418-001</EndToEndId>
+        <TxId>TXN20240418001234567</TxId>
+        <UETR>a1b2c3d4-e5f6-7890-abcd-ef1234567890</UETR>
+      </PmtId>
+      <IntrBkSttlmAmt Ccy="USD">50000.00</IntrBkSttlmAmt>
+      <IntrBkSttlmDt>2024-04-18</IntrBkSttlmDt>
+      <ChrgBr>SHA</ChrgBr>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>CHASUS33</BICFI>
+          <Nm>JPMORGAN CHASE BANK, N.A.</Nm>
+          <ClrSysMmbId><ClrSysId><Cd>USABA</Cd></ClrSysId><MmbId>021000021</MmbId></ClrSysMmbId>
+        </FinInstnId>
+      </DbtrAgt>
+      <Dbtr>
+        <Nm>ACME CORPORATION</Nm>
+        <PstlAdr>
+          <Ctry>US</Ctry>
+          <AdrLine>500 Fifth Avenue</AdrLine>
+          <AdrLine>New York, NY 10110</AdrLine>
+        </PstlAdr>
+      </Dbtr>
+      <DbtrAcct>
+        <Id><Othr><Id>001234567890</Id></Othr></Id>
+      </DbtrAcct>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>DEUTDEDB</BICFI>
+          <Nm>DEUTSCHE BANK AG</Nm>
+        </FinInstnId>
+      </CdtrAgt>
+      <Cdtr>
+        <Nm>BERLIN TECH GMBH</Nm>
+        <PstlAdr>
+          <Ctry>DE</Ctry>
+          <AdrLine>Unter den Linden 21</AdrLine>
+          <AdrLine>10117 Berlin</AdrLine>
+        </PstlAdr>
+      </Cdtr>
+      <CdtrAcct>
+        <Id><IBAN>DE89370400440532013000</IBAN></Id>
+      </CdtrAcct>
+      <Purp><Cd>SUPP</Cd></Purp>
+      <RmtInf>
+        <Ustrd>INVOICE INV-2024-00892 DATED 2024-04-01 GOODS SUPPLY AGREEMENT REF ACME-BTG-2024</Ustrd>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>`;
+
+  // ── App state ──────────────────────────────────────────────────────────────
   let lastResult = null;
 
   // ── File handling ──────────────────────────────────────────────────────────
@@ -756,8 +994,8 @@
   function readFile(file) {
     if (file.size > 1_048_576) { showError('Archivo demasiado grande (máx 1MB)'); return; }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      document.getElementById('xmlInput').value = e.target.result;
+    reader.onload = (ev) => {
+      document.getElementById('xmlInput').value = ev.target.result;
       onInputChange();
       showToast('📂', `${file.name} cargado`);
     };
@@ -771,35 +1009,20 @@
     hideError();
   }
 
-  // ── Load sample ────────────────────────────────────────────────────────────
-  async function loadSample() {
-    try {
-      const r = await fetch('./sample/pacs008_sample.xml');
-      const txt = await r.text();
-      document.getElementById('xmlInput').value = txt;
-      onInputChange();
-      showToast('📄', 'Sample cargado — JPMorgan → Deutsche Bank');
-    } catch {
-      showError('No se pudo cargar el sample. Asegúrate de servir la app desde un servidor.');
-    }
+  // ── Load sample (embedded — no fetch) ─────────────────────────────────────
+  function loadSample() {
+    document.getElementById('xmlInput').value = SAMPLE_XML;
+    onInputChange();
+    showToast('📄', 'Sample cargado — JPMorgan → Deutsche Bank');
   }
 
   // ── Translate ──────────────────────────────────────────────────────────────
-  async function translate() {
+  function translate() {
     const xml = document.getElementById('xmlInput').value.trim();
     if (!xml) return;
-
     hideError();
-
-    // Wait for module to load
-    const fn = window._translate;
-    if (!fn) {
-      showError('Módulo de traducción no disponible. Serve la app con un servidor HTTP.');
-      return;
-    }
-
     try {
-      const result = fn(xml);
+      const result = translatePacs008ToMT103(xml);
       lastResult = result;
       renderResult(result);
     } catch (err) {
